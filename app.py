@@ -11,6 +11,7 @@ from catboost import CatBoostClassifier
 import random
 from loguru import logger
 from dotenv import load_dotenv
+import hashlib
 
 
 app = FastAPI()
@@ -33,6 +34,13 @@ def get_model_path(path: str) -> str:
     else:
         MODEL_PATH = path
     return MODEL_PATH
+
+
+def hash_md5(user) -> int:
+    my_salt = 'karpov_c'
+    user_str = str(user) + my_salt
+    group = int(hashlib.md5(user_str.encode()).hexdigest(), 17) % 100
+    return group
 
 
 def batch_load_sql(query: str):
@@ -133,4 +141,10 @@ features = load_features()
 @app.get("/post/recommendations/", response_model=List[PostGet])
 def recommended_posts(id: int, time: datetime, limit: int = 10) -> List[PostGet]:
     return get_recomm_feed(id, time, limit)
+
+
+@app.get("/group")
+def recommended_posts(id: int):
+    return hash_md5(id)
+
 
