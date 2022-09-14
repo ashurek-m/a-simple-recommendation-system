@@ -21,6 +21,7 @@ class PostGet(BaseModel):
     id: int
     text: str
     topic: str
+    exp_group: str
 
     class Config:
         orm_mode = True
