@@ -28,6 +28,11 @@ class PostGet(BaseModel):
         orm_mode = True
 
 
+class Response(BaseModel):
+    exp_group: str
+    recommendation: List[PostGet]
+
+
 def get_model_path(path: str) -> str:
     if os.environ.get("IS_LMS") == "1":
         MODEL_PATH = '/workdir/user_input/model'
@@ -36,11 +41,14 @@ def get_model_path(path: str) -> str:
     return MODEL_PATH
 
 
-def hash_md5(user) -> int:
+def get_exp_group(user) -> str:
     my_salt = 'karpov_c'
     user_str = str(user) + my_salt
-    group = int(hashlib.md5(user_str.encode()).hexdigest(), 17) % 100
-    return group
+    group = int(hashlib.md5(user_str.encode()).hexdigest(), 17) % 2
+    if group == 0:
+        return 'control'
+    else:
+        return 'test'
 
 
 def batch_load_sql(query: str):
@@ -82,7 +90,7 @@ def load_features():
     return [like_df, post_df, user_df, post_orig]
 
 
-def get_recomm_feed(id: int, time: datetime, limit: int):
+def get_recomm_feed(id: int, time: datetime, limit: int, model):
     # Фильт юзера
     logger.info(f'filter user {id}')
     user = features[2].loc[features[2].user_id == id]
@@ -126,14 +134,33 @@ def get_recomm_feed(id: int, time: datetime, limit: int):
     ]
 
 
-def load_models():
+def return_recommend_vs_exp_group(user_id, time, limit):
+    exp_group = get_exp_group(user_id)
+    if exp_group == 'control':
+        recommendation = get_recomm_feed(id=id, time=time, limit=limit, model=model_control)
+    elif exp_group == 'test':
+        recommendation = get_recomm_feed(id=id, time=time, limit=limit, model=model_test)
+    else:
+        raise ValueError('unknow group')
+    return [
+        Response(
+            **{
+               'exp_group': exp_group,
+                'recommendation': recommendation
+            }
+        )
+    ]
+
+
+def load_models(model_name):
     catboost = CatBoostClassifier()
-    path = get_model_path('catboost_model')
+    path = get_model_path(model_name)
     return catboost.load_model(path)
 
 
-logger.info('load model')
-model = load_models()
+logger.info('load models')
+model_control = load_models('model_control')
+model_test = load_models('model_test')
 logger.info('load features')
 features = load_features()
 
@@ -141,10 +168,3 @@ features = load_features()
 @app.get("/post/recommendations/", response_model=List[PostGet])
 def recommended_posts(id: int, time: datetime, limit: int = 10) -> List[PostGet]:
     return get_recomm_feed(id, time, limit)
-
-
-@app.get("/group")
-def recommended_posts(id: int):
-    return hash_md5(id)
-
-
