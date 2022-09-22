@@ -10,12 +10,12 @@ import os
 from catboost import CatBoostClassifier
 import random
 from loguru import logger
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 import hashlib
 
 
 app = FastAPI()
-load_dotenv()
+#load_dotenv()
 
 
 class PostGet(BaseModel):
@@ -52,7 +52,7 @@ def get_exp_group(user) -> str:
 
 
 def batch_load_sql(query: str):
-    engine = create_engine(os.environ.get("CON"))
+    engine = create_engine(os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"))
     conn = engine.connect().execution_options(stream_results=True)
     chunks = []
     for chunk_dataframe in pd.read_sql(query, conn, chunksize=200000):
@@ -67,14 +67,14 @@ def load_features():
         """SELECT * 
         FROM public.ashurek_user
         """,
-        con=os.environ.get("CON")
+        con=os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml")
     )
 
     post_df = pd.read_sql(
-        """SELECT * 
+        """SELECT post_id, text, topic 
         FROM public.ashurek_post
         """,
-        con=os.environ.get("CON")
+        con=os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml")
     )
     query_like = """SELECT DISTINCT post_id, user_id
                     FROM public.feed_data
@@ -85,7 +85,7 @@ def load_features():
         """SELECT * 
         FROM public.post_text_df
         """,
-        con=os.environ.get("CON")
+        con=os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml")
     )
     return [like_df, post_df, user_df, post_orig]
 
@@ -166,5 +166,9 @@ features = load_features()
 
 
 @app.get("/post/recommendations/", response_model=List[PostGet])
-def recommended_posts(id: int, time: datetime, limit: int = 10) -> List[PostGet]:
-    return get_recomm_feed(id, time, limit)
+def recommended_posts(id: int, time: datetime, limit: int = 10) -> List[Response]:
+    return return_recommend_vs_exp_group(user_id=id, time=time, limit=limit)
+
+
+if __name__ in '__main__':
+    uvicorn.run("app:app", host="127.0.0.1", port=5000)
