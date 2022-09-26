@@ -52,7 +52,7 @@ def get_exp_group(user) -> str:
 
 
 def batch_load_sql(query: str):
-    engine = create_engine(os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"))
+    engine = create_engine("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml")
     conn = engine.connect().execution_options(stream_results=True)
     chunks = []
     for chunk_dataframe in pd.read_sql(query, conn, chunksize=200000):
@@ -67,14 +67,14 @@ def load_features():
         """SELECT * 
         FROM public.ashurek_user
         """,
-        con=os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml")
+        con="postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"
     )
 
     post_df = pd.read_sql(
         """SELECT post_id, text, topic 
         FROM public.ashurek_post
         """,
-        con=os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml")
+        con="postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"
     )
     query_like = """SELECT DISTINCT post_id, user_id
                     FROM public.feed_data
@@ -85,7 +85,7 @@ def load_features():
         """SELECT * 
         FROM public.post_text_df
         """,
-        con=os.environ.get("postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml")
+        con="postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"
     )
     return [like_df, post_df, user_df, post_orig]
 
@@ -152,15 +152,21 @@ def return_recommend_vs_exp_group(user_id, time, limit):
     ]
 
 
-def load_models(model_name):
+def load_models_control():
     catboost = CatBoostClassifier()
-    path = get_model_path(model_name)
+    path = get_model_path('model_control')
+    return catboost.load_model(path)
+
+
+def load_models_test():
+    catboost = CatBoostClassifier()
+    path = get_model_path('model_test')
     return catboost.load_model(path)
 
 
 logger.info('load models')
-model_control = load_models('model_control')
-model_test = load_models('model_test')
+model_control = load_models_control()
+model_test = load_models_test()
 logger.info('load features')
 features = load_features()
 
