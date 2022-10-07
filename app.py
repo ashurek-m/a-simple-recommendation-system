@@ -239,9 +239,11 @@ def recommended_posts(id: int, time: datetime, limit: int = 10) -> List[Response
 def recommended(id: int, time: datetime, limit: int = 10) -> List[Response]:
     return return_recommend_vs_exp_group(user_id=id, time=time, limit=limit)
 
+
 @app.get('/privet')
 def priv(name):
     return f'privet {name}'
+
 
 if __name__ in '__main__':
     uvicorn.run("app:app", host="127.0.0.1", port=5000)
