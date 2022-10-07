@@ -33,9 +33,17 @@ class Response(BaseModel):
     recommendation: List[PostGet]
 
 
-def get_model_path(path: str) -> str:
+def get_model_path_control(path: str) -> str:
     if os.environ.get("IS_LMS") == "1":
-        MODEL_PATH = '/workdir/user_input/model'
+        MODEL_PATH = '/workdir/user_input/model_control'
+    else:
+        MODEL_PATH = path
+    return MODEL_PATH
+
+
+def get_model_path_test(path: str) -> str:
+    if os.environ.get("IS_LMS") == "1":
+        MODEL_PATH = '/workdir/user_input/model_test'
     else:
         MODEL_PATH = path
     return MODEL_PATH
@@ -70,12 +78,20 @@ def load_features():
         con="postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"
     )
 
-    post_df = pd.read_sql(
+    post_df_control = pd.read_sql(
         """SELECT post_id, text, topic 
         FROM public.ashurek_post
         """,
         con="postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"
     )
+
+    post_df_test = pd.read_sql(
+        """SELECT * 
+        FROM public.ashurek_post
+        """,
+        con="postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"
+    )
+
     query_like = """SELECT DISTINCT post_id, user_id
                     FROM public.feed_data
                     WHERE action = 'like'
@@ -87,10 +103,10 @@ def load_features():
         """,
         con="postgresql://robot-startml-ro:pheiph0hahj1Vaif@postgres.lab.karpov.courses:6432/startml"
     )
-    return [like_df, post_df, user_df, post_orig]
+    return [like_df, post_df_control, user_df, post_orig, post_df_test]
 
 
-def get_recomm_feed(id: int, time: datetime, limit: int, model):
+def get_recomm_feed_control(id: int, time: datetime, limit: int, model):
     # Фильт юзера
     logger.info(f'filter user {id}')
     user = features[2].loc[features[2].user_id == id]
@@ -134,12 +150,55 @@ def get_recomm_feed(id: int, time: datetime, limit: int, model):
     ]
 
 
+def get_recomm_feed_test(id: int, time: datetime, limit: int, model):
+    # Фильт юзера
+    logger.info(f'filter user {id}')
+    user = features[2].loc[features[2].user_id == id]
+    user = user.drop('user_id', axis=1)
+
+    # Фичи по постам
+    logger.info('load features post')
+    features_post = features[4].set_index('post_id')
+
+    # Объденим вектор постов и вектор юзера
+    logger.info('concat post and user')
+    add_user_features = dict(zip(user.columns, user.values[0]))
+    predict_features = features_post.assign(**add_user_features)
+
+    # Добавляем инфо про time
+    logger.info('add time')
+    predict_features['month'] = time.month
+    predict_features['day'] = time.day
+    predict_features['weekday'] = time.weekday()
+
+    # Делаем предсказания
+    logger.info('predict')
+    pre = model.predict_proba(predict_features)[:, 1]
+    predict_features['predicts'] = pre
+
+    # Удаляем записи в которых уже был лайк
+    logger.info('delete like post')
+    like_post = features[0]
+    like_post = like_post.loc[like_post.user_id == id].post_id.values
+    filtered_ = predict_features[~predict_features.index.isin(like_post)]
+
+    # Выдаем post_id для рекомендаций
+    recomm_post = filtered_.sort_values('predicts')[-limit:].index
+
+    return [
+        PostGet(**{
+            "id": i,
+            "text": features[3][features[3].post_id == i].text.values[0],
+            "topic": features[3][features[3].post_id == i].topic.values[0]
+        }) for i in recomm_post
+    ]
+
 def return_recommend_vs_exp_group(user_id, time, limit):
     exp_group = get_exp_group(user_id)
     if exp_group == 'control':
-        recommendation = get_recomm_feed(id=id, time=time, limit=limit, model=model_control)
+        recommendation = get_recomm_feed_control(id=id, time=time, limit=limit, model=model_control)
     elif exp_group == 'test':
-        recommendation = get_recomm_feed(id=id, time=time, limit=limit, model=model_test)
+        recommendation = get_recomm_feed_test(id=id, time=time, limit=limit, model=model_test)
     else:
         raise ValueError('unknow group')
     return [
@@ -154,13 +213,13 @@ def return_recommend_vs_exp_group(user_id, time, limit):
 
 def load_models_control():
     catboost = CatBoostClassifier()
-    path = get_model_path('model_control')
+    path = get_model_path_control('model_control')
     return catboost.load_model(path)
 
 
 def load_models_test():
     catboost = CatBoostClassifier()
-    path = get_model_path('model_test')
+    path = get_model_path_test('model_test')
     return catboost.load_model(path)
 
 
